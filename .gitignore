@@ -29,5 +29,6 @@ vcpkg_installed/
 *.user
 *.suo
 .cache/
+.dataset/
 
 

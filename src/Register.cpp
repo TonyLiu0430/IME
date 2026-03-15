@@ -76,6 +76,18 @@ HRESULT RegisterServer() {
         );
     }
     pProfiles->Release();
+    if (FAILED(hr)) return hr;
+
+    // 3. 向 TSF 註冊分類：將此 Text Service 標記為「鍵盤」類型
+    //    缺少此步驟的話，Windows 設定中新增的輸入法無法持久保留。
+    ITfCategoryMgr* pCategoryMgr = nullptr;
+    hr = CoCreateInstance(CLSID_TF_CategoryMgr, nullptr, CLSCTX_INPROC_SERVER, IID_ITfCategoryMgr,
+                          reinterpret_cast<void**>(&pCategoryMgr));
+    if (SUCCEEDED(hr)) {
+        hr = pCategoryMgr->RegisterCategory(c_clsidTextService, GUID_TFCAT_TIP_KEYBOARD, c_clsidTextService);
+        pCategoryMgr->Release();
+    }
+
     return hr;
 }
 
@@ -86,7 +98,15 @@ HRESULT UnregisterServer() {
     wchar_t szCLSID[64] = {};
     if (StringFromGUID2(c_clsidTextService, szCLSID, ARRAYSIZE(szCLSID)) == 0) return E_FAIL;
 
-    // 1. 向 TSF 反登錄
+    // 1. 向 TSF 反登錄分類
+    ITfCategoryMgr* pCategoryMgr = nullptr;
+    if (SUCCEEDED(CoCreateInstance(CLSID_TF_CategoryMgr, nullptr, CLSCTX_INPROC_SERVER, IID_ITfCategoryMgr,
+                                   reinterpret_cast<void**>(&pCategoryMgr)))) {
+        pCategoryMgr->UnregisterCategory(c_clsidTextService, GUID_TFCAT_TIP_KEYBOARD, c_clsidTextService);
+        pCategoryMgr->Release();
+    }
+
+    // 2. 向 TSF 反登錄 Profile
     ITfInputProcessorProfiles* pProfiles = nullptr;
     if (SUCCEEDED(CoCreateInstance(CLSID_TF_InputProcessorProfiles, nullptr, CLSCTX_INPROC_SERVER,
                                    IID_ITfInputProcessorProfiles, reinterpret_cast<void**>(&pProfiles)))) {
@@ -95,7 +115,7 @@ HRESULT UnregisterServer() {
         pProfiles->Release();
     }
 
-    // 2. 從登錄檔移除 COM 項目
+    // 3. 從登錄檔移除 COM 項目
     const std::wstring clsidKey = std::wstring(L"Software\\Classes\\CLSID\\") + szCLSID;
     RegDeleteTreeW(HKEY_LOCAL_MACHINE, clsidKey.c_str());
 

@@ -2,6 +2,7 @@
 
 #include <new>
 
+#include "DebugSink.h"
 #include "Globals.h"
 #include "bopomofo.h"
 
@@ -104,10 +105,19 @@ HRESULT CTextService::_Activate(ITfThreadMgr* pThreadMgr, TfClientId tfClientId)
     }
 
     cleanup.release();  // 成功，取消回滾
+
+    // ── 偵錯：連線至 Python 接收端 ───────────────────────────
+    DebugSink::instance().connect();
+    DebugSink::instance().send(L"IME", L"Activated");
+
     return S_OK;
 }
 
 void CTextService::_Deactivate() {
+    // ── 偵錯：通知 Python 並斷線 ─────────────────────────────
+    DebugSink::instance().send(L"IME", L"Deactivated");
+    DebugSink::instance().disconnect();
+
     // 結束組字
     if (_pComposition) {
         _pComposition->EndComposition(TF_INVALID_COOKIE);
@@ -190,6 +200,7 @@ STDMETHODIMP CTextService::OnKeyDown(ITfContext* pContext, WPARAM wParam, LPARAM
 
     // ── Enter：送出組字 ─────────────────────────────────────
     if (wParam == VK_RETURN && !_compositionBuffer.empty()) {
+        DebugSink::instance().send(L"COMMIT", _compositionBuffer);
         _EndComposition(pContext);
         *pfEaten = TRUE;
         return S_OK;
@@ -197,6 +208,7 @@ STDMETHODIMP CTextService::OnKeyDown(ITfContext* pContext, WPARAM wParam, LPARAM
 
     // ── Escape：取消組字 ────────────────────────────────────
     if (wParam == VK_ESCAPE && _pComposition) {
+        DebugSink::instance().send(L"CANCEL", _compositionBuffer);
         _compositionBuffer.clear();
         _SetCompositionText(pContext, L"");
         _EndComposition(pContext);
@@ -242,6 +254,7 @@ STDMETHODIMP CTextService::OnKeyDown(ITfContext* pContext, WPARAM wParam, LPARAM
             _StartComposition(pContext);
         }
         _compositionBuffer.push_back(cur_char.value());
+        DebugSink::instance().send(L"KEY", _compositionBuffer);
         _SetCompositionText(pContext, _compositionBuffer);
         *pfEaten = TRUE;
         return S_OK;
@@ -297,7 +310,7 @@ HRESULT CTextService::_EndComposition(ITfContext* /*pContext*/) {
     return S_OK;
 }
 
-HRESULT CTextService::_SetCompositionText(ITfContext* pContext, const std::wstring& text) {
+HRESULT CTextService::_SetCompositionText(ITfContext* /*pContext*/, const std::wstring& /*text*/) {
     // TODO: 以 ITfRange + ITfProperty 更新組字字串與顯示屬性
     return S_OK;
 }

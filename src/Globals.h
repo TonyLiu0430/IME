@@ -27,4 +27,4 @@ inline const GUID c_guidProfile = {0xb2c3d4e5, 0xf6a7, 0x8901, {0xbc, 0xde, 0xf0
 // ============================================================
 //  Text Service 顯示名稱
 // ============================================================
-constexpr wchar_t c_szDesc[] = L"My TSF IME";
+constexpr wchar_t c_szDesc[] = L"My TSF IME " __DATE__ " " __TIME__;

@@ -3,6 +3,7 @@ set(SOURCES
     Register.cpp
     ClassFactory.cpp
     TextService.cpp
+    DebugSink.cpp
     ime.def
 )
 
@@ -35,6 +36,7 @@ target_link_libraries(IME PRIVATE
     advapi32    # Registry API
     ole32       # COM
     oleaut32    # COM Automation
+    ws2_32      # Winsock2 (DebugSink)
 )
 
 set_target_properties(IME PROPERTIES
