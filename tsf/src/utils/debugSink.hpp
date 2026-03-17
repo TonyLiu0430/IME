@@ -12,7 +12,7 @@ public:
         return s;
     }
 
-    inline void connect(const char* host = "127.0.0.1", unsigned short port = 9876) {
+    inline void connect(const char* host = "239.255.42.99", unsigned short port = 9876) {
         if (_sock != INVALID_SOCKET) return;
 
         if (!_wsaStarted) {
@@ -21,39 +21,36 @@ public:
             _wsaStarted = true;
         }
 
-        SOCKET sock = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        SOCKET sock = ::socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
         if (sock == INVALID_SOCKET) return;
 
-        sockaddr_in addr{};
-        addr.sin_family = AF_INET;
-        addr.sin_port = htons(port);
-        if (inet_pton(AF_INET, host, &addr.sin_addr) != 1) {
+        in_addr multicastAddr{};
+        if (inet_pton(AF_INET, host, &multicastAddr) != 1) {
             ::closesocket(sock);
             return;
         }
 
-        // 非阻塞連線（避免在 IME 啟動時卡住主執行緒）
-        u_long nonBlocking = 1;
-        ioctlsocket(sock, FIONBIO, &nonBlocking);
+        _dest = {};
+        _dest.sin_family = AF_INET;
+        _dest.sin_port = htons(port);
+        _dest.sin_addr = multicastAddr;
 
-        ::connect(sock, reinterpret_cast<sockaddr*>(&addr), sizeof(addr));
+        // Keep multicast traffic local and visible to local receivers.
+        const int ttl = 1;
+        setsockopt(sock, IPPROTO_IP, IP_MULTICAST_TTL, reinterpret_cast<const char*>(&ttl), sizeof(ttl));
 
-        // 等待最多 200ms
-        fd_set wset{};
-        FD_ZERO(&wset);
-        FD_SET(sock, &wset);
-        timeval tv{0, 200'000};  // 200ms
-        if (::select(0, nullptr, &wset, nullptr, &tv) > 0) {
-            // 連線成功，切回阻塞模式
-            nonBlocking = 0;
-            ioctlsocket(sock, FIONBIO, &nonBlocking);
-            _sock = sock;
-        } else {
-            ::closesocket(sock);
+        const int loop = 1;
+        setsockopt(sock, IPPROTO_IP, IP_MULTICAST_LOOP, reinterpret_cast<const char*>(&loop), sizeof(loop));
+
+        in_addr loopbackIf{};
+        if (inet_pton(AF_INET, "127.0.0.1", &loopbackIf) == 1) {
+            setsockopt(sock, IPPROTO_IP, IP_MULTICAST_IF, reinterpret_cast<const char*>(&loopbackIf), sizeof(loopbackIf));
         }
+
+        _sock = sock;
     }
 
-    // 斷開連線並清理 Winsock 資源
+    // Close socket and clean up Winsock.
     inline void disconnect() {
         if (_sock != INVALID_SOCKET) {
             ::closesocket(_sock);
@@ -65,30 +62,30 @@ public:
         }
     }
 
-    // 傳送一筆訊息：格式 "[TAG] TEXT\n"（以 UTF-8 編碼）
+    // Send one line in the format "[TAG] TEXT\n" (UTF-8).
     inline void send(const wchar_t* tag, const std::wstring& text) {
-        if (_sock == INVALID_SOCKET) return;
+        if (_sock == INVALID_SOCKET) {
+            connect();
+            if (_sock == INVALID_SOCKET) return;
+        }
 
-        // 組合訊息：[TAG] TEXT\n
         std::string msg = "[";
         msg += toUtf8(tag);
         msg += "] ";
         msg += toUtf8(text);
         msg += "\n";
 
-        // 全部送出（簡單 loop 處理短資料）
-        const char* ptr = msg.c_str();
-        int remaining = static_cast<int>(msg.size());
-        while (remaining > 0) {
-            int sent = ::send(_sock, ptr, remaining, 0);
-            if (sent <= 0) {
-                // 連線中斷，清理
-                ::closesocket(_sock);
-                _sock = INVALID_SOCKET;
-                return;
-            }
-            ptr += sent;
-            remaining -= sent;
+        const int sent = ::sendto(
+            _sock,
+            msg.data(),
+            static_cast<int>(msg.size()),
+            0,
+            reinterpret_cast<const sockaddr*>(&_dest),
+            static_cast<int>(sizeof(_dest)));
+
+        if (sent == SOCKET_ERROR) {
+            ::closesocket(_sock);
+            _sock = INVALID_SOCKET;
         }
     }
 
@@ -111,6 +108,7 @@ private:
 
     bool _wsaStarted = false;
     SOCKET _sock = INVALID_SOCKET;
+    sockaddr_in _dest{};
 
     static std::string toUtf8(const std::wstring& ws) {
         if (ws.empty()) return {};

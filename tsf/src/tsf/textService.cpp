@@ -195,14 +195,9 @@ STDMETHODIMP TextService::OnSetFocus(BOOL /*fForeground*/) {
  */
 STDMETHODIMP TextService::OnTestKeyDown(ITfContext* /*pContext*/, WPARAM wParam, LPARAM /*lParam*/, BOOL* pfEaten) {
     if (!pfEaten) return E_INVALIDARG;
-    auto bopomofo_char = Bopomofo::lookup(static_cast<int>(wParam));
-    if (bopomofo_char) {
-        DebugSink::instance().send(L"TEST_KEY_DOWN", std::wstring(1, bopomofo_char.value()));
-    } else {
-        DebugSink::instance().send(L"TEST_KEY_DOWN", std::wstring(L"VK_") + std::to_wstring(wParam));
-    }
-    // *pfEaten = (Bopomofo::lookup(static_cast<int>(wParam)) == std::nullopt) ? TRUE : FALSE;
-    *pfEaten = (wParam >= 'A' && wParam <= 'Z') ? TRUE : FALSE;
+
+    *pfEaten = (Bopomofo::lookup(static_cast<int>(wParam)) == std::nullopt) ? TRUE : FALSE;
+    // *pfEaten = (wParam >= 'A' && wParam <= 'Z') ? TRUE : FALSE;
     return S_OK;
 }
 
