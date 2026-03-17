@@ -1,8 +1,8 @@
 #include <wil/com.h>
 
-#include "ClassFactory.h"
-#include "Globals.h"
-#include "Register.h"
+#include "tsf/classFactory.h"
+#include "tsf/globals.h"
+#include "tsf/register.h"
 
 // ============================================================
 //  DllMain

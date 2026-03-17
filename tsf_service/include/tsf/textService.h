@@ -6,20 +6,12 @@
 
 #include <string>
 
-// ============================================================
-//  CTextService
-//
-//  主要 Text Service 類別，實作以下 TSF 介面：
-//    ITfTextInputProcessorEx  – 啟動 / 停用進入點
-//    ITfThreadMgrEventSink    – 監聽 Thread Manager 事件
-//    ITfKeyEventSink          – 攔截鍵盤輸入
-//    ITfCompositionSink        – 組字結束通知
-// ============================================================
 class CTextService
     : public ITfTextInputProcessorEx,
       public ITfThreadMgrEventSink,
       public ITfKeyEventSink,
-      public ITfCompositionSink {
+      public ITfCompositionSink,
+      public ITfDisplayAttributeProvider {
 public:
     CTextService();
     ~CTextService();
@@ -54,23 +46,21 @@ public:
     // ── ITfCompositionSink ────────────────────────────────────
     STDMETHODIMP OnCompositionTerminated(TfEditCookie ecWrite, ITfComposition* pComposition) override;
 
+    // ── ITfDisplayAttributeProvider ─────────────────────────────
+    STDMETHODIMP EnumDisplayAttributeInfo(IEnumTfDisplayAttributeInfo** ppEnum) override;
+    STDMETHODIMP GetDisplayAttributeInfo(REFGUID guid, ITfDisplayAttributeInfo** ppInfo) override;
+
 private:
-    // 真正的啟動 / 停用邏輯（供 Activate 與 ActivateEx 共用）
     HRESULT _Activate(ITfThreadMgr* pThreadMgr, TfClientId tfClientId);
     void _Deactivate();
 
-    // ── 組字輔助 ──────────────────────────────────────────────
     HRESULT _StartComposition(ITfContext* pContext);
     HRESULT _EndComposition(ITfContext* pContext);
     HRESULT _SetCompositionText(ITfContext* pContext, const std::wstring& text);
-
-    // ── 成員變數 ──────────────────────────────────────────────
     LONG _cRef = 1;
     wil::com_ptr_nothrow<ITfThreadMgr> _pThreadMgr;
     TfClientId _tfClientId = TF_CLIENTID_NULL;
     DWORD _dwThreadMgrEventSinkCookie = TF_INVALID_COOKIE;
     wil::com_ptr_nothrow<ITfComposition> _pComposition;
-
-    // 目前組字緩衝（例：使用者鍵入但尚未上字的字串）
     std::wstring _compositionBuffer;
 };

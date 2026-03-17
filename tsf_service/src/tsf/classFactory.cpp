@@ -1,13 +1,9 @@
-#include "ClassFactory.h"
+#include "tsf/classFactory.h"
 
 #include <wil/com.h>
 
-#include "Globals.h"
-#include "TextService.h"
-
-// ============================================================
-//  CClassFactory
-// ============================================================
+#include "tsf/globals.h"
+#include "tsf/textService.h"
 
 CClassFactory::CClassFactory() : _cRef(1) {
     ++g_cDllRef;

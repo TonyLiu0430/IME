@@ -3,11 +3,9 @@
 #include <unknwn.h>
 #include <windows.h>
 
-
-// ============================================================
-//  CClassFactory
-//  COM Class Factory：負責建立 CTextService 實體。
-// ============================================================
+/**
+ * @brief Class factory for creating TSF service instances
+ */
 class CClassFactory : public IClassFactory {
 public:
     CClassFactory();

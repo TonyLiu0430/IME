@@ -1,11 +1,11 @@
-#include "Register.h"
+#include "tsf/register.h"
 
 #include <msctf.h>
 #include <objbase.h>  // StringFromGUID2
 
 #include <string>
 
-#include "Globals.h"
+#include "tsf/globals.h"
 
 // ============================================================
 //  內部輔助：寫入 REG_SZ 登錄值

@@ -14,4 +14,4 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
 endif()
 
-add_subdirectory(src)
+add_subdirectory(tsf_service)

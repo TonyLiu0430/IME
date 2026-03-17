@@ -1,13 +1,18 @@
-set(SOURCES
-    DllMain.cpp
-    Register.cpp
-    ClassFactory.cpp
-    TextService.cpp
-    DebugSink.cpp
-    ime.def
-)
+# set(SOURCES
+#     DllMain.cpp
+#     Register.cpp
+#     ClassFactory.cpp
+#     TextService.cpp
+#     DebugSink.cpp
+#     ime.def
+# )
 
-add_library(IME SHARED ${SOURCES})
+file(GLOB_RECURSE HEADERS "include/*.h" "include/*.hpp")
+file(GLOB_RECURSE SOURCES "src/*.cpp")
+
+include_directories(include)
+
+add_library(IME SHARED ${SOURCES} ${HEADERS})
 
 target_compile_definitions(IME PRIVATE
     WIN32_LEAN_AND_MEAN

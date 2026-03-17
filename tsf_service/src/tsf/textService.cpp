@@ -1,14 +1,11 @@
-#include "TextService.h"
+#include "tsf/textService.h"
 
 #include <new>
 
-#include "DebugSink.h"
-#include "Globals.h"
-#include "bopomofo.h"
-
-// ============================================================
-//  建構 / 解構
-// ============================================================
+#include "core/bopomofo.h"
+#include "debugSink.h"
+#include "tsf/globals.h"
+#include "tsf/textService.h"
 
 CTextService::CTextService() {
     ++g_cDllRef;
@@ -17,10 +14,6 @@ CTextService::CTextService() {
 CTextService::~CTextService() {
     --g_cDllRef;
 }
-
-// ============================================================
-//  IUnknown
-// ============================================================
 
 STDMETHODIMP CTextService::QueryInterface(REFIID riid, void** ppv) {
     if (!ppv) return E_INVALIDARG;
@@ -36,6 +29,8 @@ STDMETHODIMP CTextService::QueryInterface(REFIID riid, void** ppv) {
         *ppv = static_cast<ITfKeyEventSink*>(this);
     } else if (IsEqualIID(riid, IID_ITfCompositionSink)) {
         *ppv = static_cast<ITfCompositionSink*>(this);
+    } else if (IsEqualIID(riid, IID_ITfDisplayAttributeProvider)) {
+        *ppv = static_cast<ITfDisplayAttributeProvider*>(this);
     }
 
     if (*ppv) {
@@ -55,10 +50,6 @@ STDMETHODIMP_(ULONG) CTextService::Release() {
     return static_cast<ULONG>(cRef);
 }
 
-// ============================================================
-//  ITfTextInputProcessor
-// ============================================================
-
 STDMETHODIMP CTextService::Activate(ITfThreadMgr* pThreadMgr, TfClientId tfClientId) {
     return _Activate(pThreadMgr, tfClientId);
 }
@@ -68,17 +59,9 @@ STDMETHODIMP CTextService::Deactivate() {
     return S_OK;
 }
 
-// ============================================================
-//  ITfTextInputProcessorEx
-// ============================================================
-
 STDMETHODIMP CTextService::ActivateEx(ITfThreadMgr* pThreadMgr, TfClientId tfClientId, DWORD /*dwFlags*/) {
     return _Activate(pThreadMgr, tfClientId);
 }
-
-// ============================================================
-//  核心啟動邏輯
-// ============================================================
 
 HRESULT CTextService::_Activate(ITfThreadMgr* pThreadMgr, TfClientId tfClientId) {
     RETURN_IF_FAILED(pThreadMgr->QueryInterface(IID_PPV_ARGS(_pThreadMgr.put())));
@@ -104,7 +87,7 @@ HRESULT CTextService::_Activate(ITfThreadMgr* pThreadMgr, TfClientId tfClientId)
         RETURN_IF_FAILED(pKeystrokeMgr->AdviseKeyEventSink(_tfClientId, static_cast<ITfKeyEventSink*>(this), TRUE));
     }
 
-    cleanup.release();  // 成功，取消回滾
+    cleanup.release();
 
     // ── 偵錯：連線至 Python 接收端 ───────────────────────────
     DebugSink::instance().connect();
@@ -146,10 +129,6 @@ void CTextService::_Deactivate() {
     _tfClientId = TF_CLIENTID_NULL;
 }
 
-// ============================================================
-//  ITfThreadMgrEventSink
-// ============================================================
-
 STDMETHODIMP CTextService::OnInitDocumentMgr(ITfDocumentMgr* /*pDocMgr*/) {
     return S_OK;
 }
@@ -170,10 +149,6 @@ STDMETHODIMP CTextService::OnPushContext(ITfContext* /*pContext*/) {
 STDMETHODIMP CTextService::OnPopContext(ITfContext* /*pContext*/) {
     return S_OK;
 }
-
-// ============================================================
-//  ITfKeyEventSink
-// ============================================================
 
 STDMETHODIMP CTextService::OnSetFocus(BOOL /*fForeground*/) {
     return S_OK;
@@ -227,23 +202,6 @@ STDMETHODIMP CTextService::OnKeyDown(ITfContext* pContext, WPARAM wParam, LPARAM
         return S_OK;
     }
 
-    // ── 一般可印字元 ────────────────────────────────────────
-    // if (wParam >= 'A' && wParam <= 'Z') {
-    //     // 使用 ToUnicodeEx 讓系統依目前鍵盤佈局 + Shift + Caps Lock 狀態轉換字元
-    //     BYTE keyState[256]{};
-    //     GetKeyboardState(keyState);
-    //     wchar_t buf[4]{};
-    //     const int len = ToUnicodeEx(
-    //         static_cast<UINT>(wParam), MapVirtualKey(static_cast<UINT>(wParam), MAPVK_VK_TO_VSC), keyState, buf,
-    //         ARRAYSIZE(buf), 0, GetKeyboardLayout(0));
-    //     if (len != 1) return S_OK;  // dead key 或轉換失敗，不消耗
-
-    //     if (!_pComposition) _StartComposition(pContext);
-
-    //     _compositionBuffer += buf[0];
-    //     _SetCompositionText(pContext, _compositionBuffer);
-    //     *pfEaten = TRUE;
-    // }
     auto cur_char = Bopomofo::lookup(static_cast<int>(wParam));
     if (cur_char == std::nullopt) {
         // 非注音
@@ -281,6 +239,20 @@ STDMETHODIMP CTextService::OnCompositionTerminated(TfEditCookie /*ecWrite*/, ITf
     _pComposition.reset();
     _compositionBuffer.clear();
     return S_OK;
+}
+
+// ============================================================
+//  ITfDisplayAttributeProvider
+// ============================================================
+STDMETHODIMP CTextService::EnumDisplayAttributeInfo(IEnumTfDisplayAttributeInfo** ppEnum) {
+    (void)ppEnum;
+    return E_NOTIMPL;
+}
+
+STDMETHODIMP_(HRESULT __stdcall) CTextService::GetDisplayAttributeInfo(REFGUID guid, ITfDisplayAttributeInfo** ppInfo) {
+    (void)guid;
+    (void)ppInfo;
+    return E_NOTIMPL;
 }
 
 // ============================================================
