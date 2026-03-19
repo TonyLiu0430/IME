@@ -30,5 +30,6 @@ vcpkg_installed/
 *.suo
 .cache/
 .dataset/
+.temp/
 
 

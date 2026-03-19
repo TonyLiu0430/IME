@@ -1,6 +1,7 @@
 #include "textService.h"
 
 #include "core/bopomofo.hpp"
+#include "core/engine.hpp"
 #include "system/globals.h"
 #include "utils/debugSink.hpp"
 #include "utils/healper.hpp"
@@ -269,7 +270,8 @@ STDMETHODIMP TextService::OnKeyDown(ITfContext* pContext, WPARAM wParam, LPARAM 
     // if (!itfComposition) {
     //     start_composition(pContext);
     // }
-    compositionBuffer.push_back(cur_char.value());
+    // compositionBuffer.push_back(cur_char.value());
+    compositionBuffer = Engine::instance().add(compositionBuffer, cur_char.value());
     DebugSink::instance().send(L"KEY", compositionBuffer);
     set_composition_text(pContext, compositionBuffer);
     *pfEaten = TRUE;
@@ -427,6 +429,13 @@ HRESULT TextService::set_composition_text(ITfContext* pContext, const std::wstri
         range = nullptr;
         itfComposition->GetRange(range.put()) | win::check();
         range->SetText(ec, 0, text.data(), ULONG(text.size())) | win::check();
+        range->Collapse(ec, TF_ANCHOR_END) | win::check();
+
+        TF_SELECTION selection = {};
+        selection.range = range.get();
+        selection.style.ase = TF_AE_END;
+        selection.style.fInterimChar = FALSE;
+        pContext->SetSelection(ec, 1, &selection) | win::check();
     });
     pContext->RequestEditSession(_tfClientId, editSession.get(), TF_ES_READWRITE | TF_ES_SYNC, &hr) | win::check();
     return S_OK;
