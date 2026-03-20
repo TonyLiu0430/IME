@@ -31,5 +31,6 @@ vcpkg_installed/
 .cache/
 .dataset/
 .temp/
+.tool/
 
 

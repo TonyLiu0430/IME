@@ -23,13 +23,22 @@ public:
         static WordMappingEngine engine;
         return engine;
     }
-    std::wstring lookup(const std::wstring& bopomofo) {
+    std::wstring lookup_first(const std::wstring& bopomofo) {
         if (mapping.contains(bopomofo) && !mapping[bopomofo].empty()) {
             return mapping[bopomofo][0];
         } else {
             // temporary fallback
             DebugSink::instance().send(L"MSG", bopomofo);
             return L"操";
+        }
+    }
+    std::vector<std::wstring> lookup_all(const std::wstring& bopomofo) {
+        if (mapping.contains(bopomofo)) {
+            return mapping[bopomofo];
+        } else {
+            // temporary fallback
+            DebugSink::instance().send(L"MSG", bopomofo);
+            return {L"操"};
         }
     }
 
@@ -100,7 +109,7 @@ public:
         if (!has_complete) {
             throw std::runtime_error("Cannot composit an incomplete composition unit");
         }
-        return WordMappingEngine::instance().lookup(bopomofo);
+        return WordMappingEngine::instance().lookup_first(bopomofo);
     }
 };
 
@@ -140,6 +149,9 @@ public:
     void pop_back() {
         if (buffer.empty()) return;
         buffer.pop_back();
+    }
+    std::variant<Word, CompositionUnit>& back() {
+        return buffer.back();
     }
 };
 

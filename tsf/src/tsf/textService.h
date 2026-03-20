@@ -8,6 +8,7 @@
 #include <list>
 #include <string>
 
+#include "candidateListUI.hpp"
 #include "core/bopomofoBuffer.hpp"
 #include "utils/debugSink.hpp"
 
@@ -81,12 +82,17 @@ private:
     HRESULT start_composition(ITfContext* pContext);
     HRESULT end_composition(ITfContext* pContext);
     HRESULT set_composition_text(ITfContext* pContext, const std::wstring& text);
+    bool query_candidate_anchor(ITfContext* pContext, POINT* anchor);
+    void hide_candidate_list();
+    void show_candidate_list(
+        ITfContext* pContext, std::variant<Word, CompositionUnit>& pos, const std::vector<std::wstring>& candidates);
 
     winrt::com_ptr<ITfThreadMgr> threadMgr;
     TfClientId _tfClientId = TF_CLIENTID_NULL;
     DWORD dwThreadMgrEventSinkCookie = TF_INVALID_COOKIE;
     winrt::com_ptr<ITfComposition> itfComposition;
-    // std::wstring compositionBuffer;
+    winrt::com_ptr<CandidateListUIElement> candidateListUIElement = winrt::make_self<CandidateListUIElement>();
+    DWORD dwUIElementId = TF_INVALID_COOKIE;
     BopomofoBuffer compositionBuffer;
 };
 

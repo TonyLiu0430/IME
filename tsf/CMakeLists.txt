@@ -11,8 +11,8 @@ target_compile_definitions(IME PRIVATE
     NOMINMAX
     UNICODE
     _UNICODE
-    WINVER=0x0601        # Windows 7+
-    _WIN32_WINNT=0x0601
+    WINVER=0x0A00        # Windows 10
+    _WIN32_WINNT=0x0A00
 )
 
 target_compile_options(IME PRIVATE
@@ -27,6 +27,8 @@ find_package(utf8cpp CONFIG REQUIRED)
 
 target_link_libraries(IME PRIVATE
     Microsoft::CppWinRT
+    WindowsApp
+    gdiplus
     advapi32    # Registry API
     ole32       # COM
     oleaut32    # COM Automation

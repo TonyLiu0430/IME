@@ -33,9 +33,6 @@ public:
             --tsf::Globals::dll_ref_count;
         return S_OK;
     }
-
-private:
-    LONG ref_count = 1;
 };
 
 }  // namespace tsf
