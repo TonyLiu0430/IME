@@ -688,11 +688,6 @@ void TextService::show_candidate_list_for_current_input(ITfContext* pContext, bo
         return;
     }
 
-    DebugSink::instance().send(
-        L"INFO", std::wstring(expand ? L"Expand candidate list for composition: "
-                                     : L"Showing candidate list for composition: ") +
-                     compositionBuffer.to_string());
-
     auto& target = compositionBuffer.back();
     if (std::holds_alternative<Word>(target)) {
         show_candidate_list(
@@ -715,7 +710,6 @@ bool TextService::query_candidate_anchor(ITfContext* pContext, POINT* anchor) {
     winrt::com_ptr<ITfContextView> contextView;
     HRESULT hr = pContext->GetActiveView(contextView.put());
     if (FAILED(hr) || !contextView) {
-        DebugSink::instance().send(L"INFO", L"query_candidate_anchor GetActiveView failed hr=" + std::to_wstring(hr));
         return false;
     }
 
@@ -727,8 +721,6 @@ bool TextService::query_candidate_anchor(ITfContext* pContext, POINT* anchor) {
         ULONG fetched = 0;
         const HRESULT hrSelection = pContext->GetSelection(ec, TF_DEFAULT_SELECTION, 1, &selection, &fetched);
         if (FAILED(hrSelection) || fetched == 0 || !selection.range) {
-            DebugSink::instance().send(
-                L"INFO", L"query_candidate_anchor GetSelection failed hr=" + std::to_wstring(hrSelection));
             return;
         }
 
@@ -739,25 +731,17 @@ bool TextService::query_candidate_anchor(ITfContext* pContext, POINT* anchor) {
         BOOL clipped = FALSE;
         const HRESULT hrTextExt = contextView->GetTextExt(ec, range.get(), &rc, &clipped);
         if (FAILED(hrTextExt)) {
-            DebugSink::instance().send(
-                L"INFO", L"query_candidate_anchor GetTextExt failed hr=" + std::to_wstring(hrTextExt));
             return;
         }
 
         point.x = rc.left;
         point.y = rc.bottom;
         found = true;
-        DebugSink::instance().send(
-            L"INFO", L"query_candidate_anchor rect=(" + std::to_wstring(rc.left) + L"," + std::to_wstring(rc.top) +
-                         L"," + std::to_wstring(rc.right) + L"," + std::to_wstring(rc.bottom) + L"), clipped=" +
-                         std::wstring(clipped ? L"TRUE" : L"FALSE"));
     });
 
     HRESULT hrSession = E_FAIL;
     hr = pContext->RequestEditSession(_tfClientId, editSession.get(), TF_ES_READ | TF_ES_SYNC, &hrSession);
     if (FAILED(hr) || FAILED(hrSession)) {
-        DebugSink::instance().send(L"INFO", L"query_candidate_anchor RequestEditSession failed hr=" +
-                                                std::to_wstring(hr) + L", hrSession=" + std::to_wstring(hrSession));
         return false;
     }
 
@@ -774,22 +758,14 @@ void TextService::hide_candidate_list() {
     candidateListUIElement->clear_anchor_point();
 
     if (dwUIElementId == TF_INVALID_COOKIE) {
-        DebugSink::instance().send(L"INFO", L"hide_candidate_list no active ui id");
         return;
     }
-
-    DebugSink::instance().send(L"INFO", L"hide_candidate_list ui_id=" + std::to_wstring(dwUIElementId));
 
     if (threadMgr) {
         winrt::com_ptr<ITfUIElementMgr> itfUIElementMgr;
         const HRESULT hr = threadMgr->QueryInterface<ITfUIElementMgr>(itfUIElementMgr.put());
         if (SUCCEEDED(hr) && itfUIElementMgr) {
-            const HRESULT end_hr = itfUIElementMgr->EndUIElement(dwUIElementId);
-            DebugSink::instance().send(L"INFO", L"hide_candidate_list EndUIElement hr=" + std::to_wstring(end_hr) +
-                                                    L", ui_id=" + std::to_wstring(dwUIElementId));
-        } else {
-            DebugSink::instance().send(
-                L"INFO", L"hide_candidate_list QueryInterface ITfUIElementMgr failed hr=" + std::to_wstring(hr));
+            itfUIElementMgr->EndUIElement(dwUIElementId);
         }
     }
 
@@ -801,14 +777,9 @@ void TextService::hide_candidate_list() {
  */
 void TextService::show_candidate_list(ITfContext* pContext, std::variant<Word, CompositionUnit>& pos,
                                       const std::vector<std::wstring>& candidates) {
-    DebugSink::instance().send(L"INFO", L"show_candidate_list enter, candidates=" + std::to_wstring(candidates.size()) +
-                                            L", existing_ui_id=" + std::to_wstring(dwUIElementId));
-
     winrt::com_ptr<ITfUIElementMgr> itfUIElementMgr;
     HRESULT hr = threadMgr->QueryInterface<ITfUIElementMgr>(itfUIElementMgr.put());
     if (FAILED(hr)) {
-        DebugSink::instance().send(
-            L"ERROR", L"show_candidate_list QueryInterface ITfUIElementMgr failed: " + std::to_wstring(hr));
         return;
     }
 
@@ -820,7 +791,6 @@ void TextService::show_candidate_list(ITfContext* pContext, std::variant<Word, C
     }
 
     candidateListUIElement->update(candidates, [this, itfUIElementMgr, &pos](std::wstring word) {
-        DebugSink::instance().send(L"INFO", L"candidate finalize callback word=" + word);
         if (std::holds_alternative<Word>(pos)) {
             auto& w = std::get<Word>(pos);
             w.word = word;
@@ -828,42 +798,25 @@ void TextService::show_candidate_list(ITfContext* pContext, std::variant<Word, C
             auto& v = std::get<CompositionUnit>(pos);
             pos = Word(word, v.get_bopomofo());
         }
-        const HRESULT end_hr = itfUIElementMgr->EndUIElement(dwUIElementId);
-        DebugSink::instance().send(
-            L"INFO", L"EndUIElement hr=" + std::to_wstring(end_hr) + L", ui_id=" + std::to_wstring(dwUIElementId));
+        itfUIElementMgr->EndUIElement(dwUIElementId);
         dwUIElementId = TF_INVALID_COOKIE;
         candidateListUIElement->Show(FALSE);
         candidateListUIElement->clear_anchor_point();
     });
 
     if (candidate_ui_is_active()) {
-        DebugSink::instance().send(
-            L"INFO", L"show_candidate_list reusing existing UI element id=" + std::to_wstring(dwUIElementId));
         const HRESULT update_hr = itfUIElementMgr->UpdateUIElement(dwUIElementId);
-        DebugSink::instance().send(
-            L"INFO",
-            L"UpdateUIElement hr=" + std::to_wstring(update_hr) + L", ui_id=" + std::to_wstring(dwUIElementId));
         const HRESULT show_hr = candidateListUIElement->Show(TRUE);
-        DebugSink::instance().send(L"INFO", L"Force Show(TRUE) hr=" + std::to_wstring(show_hr));
         return;
     }
 
     BOOL bShow = TRUE;
     hr = itfUIElementMgr->BeginUIElement(candidateListUIElement.get(), &bShow, &dwUIElementId);
-    DebugSink::instance().send(
-        L"INFO", L"BeginUIElement returned: " + std::to_wstring(hr) + L", bShow: " + (bShow ? L"TRUE" : L"FALSE") +
-                     L", dwUIElementId: " + std::to_wstring(dwUIElementId) + L", candidate_count=" +
-                     std::to_wstring(candidates.size()));
-
     if (FAILED(hr)) {
         return;
     }
     if (bShow) {
-        const HRESULT show_hr = candidateListUIElement->Show(TRUE);
-        DebugSink::instance().send(
-            L"INFO", L"BeginUIElement requested service-side UI, Show(TRUE) hr=" + std::to_wstring(show_hr));
-    } else {
-        DebugSink::instance().send(L"INFO", L"BeginUIElement bShow=FALSE, app side may render UI");
+        candidateListUIElement->Show(TRUE);
     }
 }
 

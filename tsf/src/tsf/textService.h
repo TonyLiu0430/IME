@@ -40,7 +40,7 @@ class TextService :
         TextService,
         ITfTextInputProcessor,
         ITfTextInputProcessorEx, 
-        ITfThreadMgrEventSink,                                
+        ITfThreadMgrEventSink,
         ITfKeyEventSink, 
         ITfCompositionSink, 
         ITfDisplayAttributeProvider> {
@@ -88,8 +88,8 @@ private:
     void show_candidate_list_for_current_input(ITfContext* pContext, bool expand);
     bool query_candidate_anchor(ITfContext* pContext, POINT* anchor);
     void hide_candidate_list();
-    void show_candidate_list(
-        ITfContext* pContext, std::variant<Word, CompositionUnit>& pos, const std::vector<std::wstring>& candidates);
+    void show_candidate_list(ITfContext* pContext, std::variant<Word, CompositionUnit>& pos,
+                             const std::vector<std::wstring>& candidates);
 
     winrt::com_ptr<ITfThreadMgr> threadMgr;
     TfClientId _tfClientId = TF_CLIENTID_NULL;
