@@ -153,7 +153,7 @@ public:
     }
 
     void add_str(const std::u16string &wstr) {
-        DebugSink::instance().send(L"INFO", u"ADD_STR :" + wstr);
+        DebugSink::instance().send(L"INFO", u"ADD_STRRR :" + wstr);
         if (wstr.size() == 0) return;
         std::vector<llama_token> tokens = tokenize(wstr);
         llama_batch batch = llama_batch_get_one(tokens.data(), (int32_t)tokens.size());
@@ -168,28 +168,38 @@ public:
     std::vector<char32_t> predict_next(const std::vector<char32_t> &candidates) {
         std::vector<llama_token> candidate_tokens;
         for (auto &c : candidates) {
-            const auto tokens = tokenizer.lookup_prefix(c);
-            candidate_tokens.append_range(tokens);
+            try {
+                const auto tokens = tokenizer.lookup_prefix(c);
+                candidate_tokens.append_range(tokens);
+            } catch (...) {
+            }
         }
         const auto prob_res = masked_predict(candidate_tokens);
-        std::vector<char32_t> res;
-        std::vector<std::pair<std::u16string, float>> res_with_prob;
-        std::set<char32_t> res_set;
+        std::unordered_map<char32_t, float> char_prob;
         for (auto &[token, prob] : prob_res) {
             const std::string u8text = llama_vocab_get_text(vocab, token);
             const std::u32string u32text = utf8::utf8to32(u8text);
-            if (!res_set.contains(u32text[0])) {
-                res.push_back(u32text[0]);
-                res_set.insert(u32text[0]);
-            }
 
-            const std::u16string u16text = utf8::utf8to16(u8text);
-            res_with_prob.push_back({u16text, prob});
+            char_prob[u32text[0]] += prob;
         }
         DebugSink::instance().send(L"INFO", L"context : "_u16 + context_buffer);
         DebugSink::instance().send(L"INFO", L"Predicted next candidates:");
-        for (const auto &[w, prob] : res_with_prob) {
-            DebugSink::instance().send(L"INFO", std::format(L"{} : prob={:.5f}", w, prob));
+        for (const auto &[w, prob] : char_prob) {
+            std::u16string str16;
+            utf8::append16(w, str16);
+            DebugSink::instance().send(L"INFO", std::format(L"{} : prob={:.5f}", str16, prob));
+        }
+
+        std::vector<std::pair<char32_t, float>> rp;
+        for (auto &[ch, prob] : char_prob) {
+            rp.push_back(std::pair<char32_t, float>{ch, prob});
+        }
+        std::ranges::sort(rp, [](const std::pair<char32_t, float> &a, const std::pair<char32_t, float> &b) {
+            return a.second > b.second;
+        });
+        std::vector<char32_t> res;
+        for (auto &[ch, prob] : rp) {
+            res.push_back(ch);
         }
         return res;
     }

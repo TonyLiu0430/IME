@@ -11,12 +11,14 @@ struct BopomofoPos {
     char16_t initial = 0, medial = 0, final = 0;
     char16_t tone = 0;
     int choose_index = 0;
-    const std::vector<char32_t>* candidates = nullptr;
+
+    bool compositable = false;
+    std::vector<char32_t> candidates;
 
     // TODO temp
     std::optional<std::vector<char32_t>> predicted_candidate;
     bool accept(char16_t c) {
-        if (candidates != nullptr) {
+        if (is_compositable()) {
             return false;
         }
         if (Bopomofo::initial.contains(c)) {
@@ -27,34 +29,35 @@ struct BopomofoPos {
             final = c;
         } else if (Bopomofo::tone.contains(c)) {
             tone = c;
-            candidates = HanziMapEngine::instance().lookup_all(to_bopomofo_string());
-            if (candidates == nullptr) {
+            std::vector<char32_t>* candi = HanziMapEngine::instance().lookup_all(to_bopomofo_string());
+            if (candi == nullptr) {
                 return false;
             }
+            compositable = true;
+            candidates = *candi;
         }
         return true;
     }
     std::u16string current() const {
-        if (candidates == nullptr) {
+        if (!is_compositable()) {
             return to_bopomofo_string();
         }
-        char32_t c = candidates->at(choose_index);
+        char32_t c = candidates.at(choose_index);
         std::u16string s;
         utf8::append16(c, s);
         return s;
     }
     void engine_choose(const std::u16string& context) {
-        if (context.size() == 0) return;
         DebugSink::instance().send(L"INFO", u"engine choose CTX: " + context);
-        if (candidates == nullptr) {
+        if (!is_compositable()) {
             DebugSink::instance().send(L"ERROR", L"No candidates to choose from");
             throw std::runtime_error("No candidates to choose from");
         }
         // TODO temp
         EngineContext engine;
         engine.add_str(context);
-        predicted_candidate = engine.predict_next(*candidates);
-        candidates = &predicted_candidate.value();
+        predicted_candidate = engine.predict_next(candidates);
+        candidates = engine.predict_next(candidates);
         choose_index = 0;
     }
 
@@ -71,16 +74,16 @@ public:
         return initial == 0 && medial == 0 && final == 0 && tone == 0;
     }
     bool is_compositable() const {
-        return candidates != nullptr;
+        return compositable;
     }
     void set_choose_index(int idx) {
         choose_index = idx;
     }
     const std::vector<char32_t>& get_candidates() const {
-        if (candidates == nullptr) {
+        if (!is_compositable()) {
             throw std::runtime_error("No candidates available");
         }
-        return *candidates;
+        return candidates;
     }
 };
 
