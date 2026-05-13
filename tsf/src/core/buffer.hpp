@@ -71,10 +71,7 @@ public:
             buffer[idx].accept(ch);
         } else {
             // current accept this ch
-            if (buffer[idx].is_compositable()) {
-                auto engine = get_engine();
-                engine->predict(u"", std::span<BopomofoPos>(buffer.begin(), buffer.begin() + idx + 1));
-            }
+            // do nothing
         }
     }
     void predict_paddings(std::u16string context) {

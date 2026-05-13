@@ -73,9 +73,11 @@ public:
         res.push_back(special_table.at("<BOS>"));
         std::string context8 = utf8::utf16to8(context16);
         std::u32string context = utf8::utf8to32(context8);
+        DebugSink::instance().send(L"INFO", U"CTXCTX : " + context);
         for (int i = 0; i < context.size(); i++) {
             std::string s;
             utf8::append(context[i], s);
+            DebugSink::instance().send(L"INFO", u"CHAR : " + utf8::utf8to16(s));
             if (context[i] == U' ') {
                 res.push_back(special_table.at("<SP>"));
             } else if (char_table.contains(s)) {
