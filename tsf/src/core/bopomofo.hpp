@@ -259,6 +259,9 @@ public:
     bool is_compositable() const {
         return compositable;
     }
+    bool is_predictable_by_engine() const {
+        return chosen || compositable;
+    }
     bool is_invalid() const {
         return invalid;
     }

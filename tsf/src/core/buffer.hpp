@@ -161,6 +161,9 @@ public:
 
         bool need_predict = false;
         for (auto& item : buffer) {
+            if (!item.is_predictable_by_engine()) {
+                return;
+            }
             if (!item.predicted) {
                 need_predict = true;
                 break;

@@ -68,6 +68,12 @@ class PipeEngine : public IEngine {
 
 public:
     void predict(const std::u16string& context, std::span<BopomofoPos> padding) override {
+        for (auto& p : padding) {
+            if (!p.is_predictable_by_engine()) {
+                return;
+            }
+        }
+
         if (!ensure_pipe()) return;
 
         // --- request ---
