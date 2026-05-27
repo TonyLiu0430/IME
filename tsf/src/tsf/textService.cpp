@@ -752,11 +752,27 @@ HRESULT TextService::end_composition(ITfContext* pContext) {
     candidate_ui_->hide();
     if (!itfComposition) return S_OK;
 
+    const std::u16string text = compositionBuffer.to_string();
     winrt::com_ptr<EditSession> editSession = winrt::make_self<EditSession>();
-    editSession->set_operation([this](TfEditCookie ec) {
+    editSession->set_operation([this, pContext, text](TfEditCookie ec) {
         if (itfComposition) {
-            itfComposition->EndComposition(ec);
+            winrt::com_ptr<ITfRange> range;
+            itfComposition->GetRange(range.put()) | win::check();
+            range->SetText(ec, 0, convu16(text.data()), static_cast<LONG>(text.size())) | win::check();
+
+            winrt::com_ptr<ITfRange> caret_range;
+            range->Clone(caret_range.put()) | win::check();
+            caret_range->Collapse(ec, TF_ANCHOR_END) | win::check();
+
+            itfComposition->EndComposition(ec) | win::check();
             itfComposition = nullptr;
+
+            TF_SELECTION selection = {};
+            selection.range = caret_range.get();
+            selection.style.ase = TF_AE_END;
+            selection.style.fInterimChar = FALSE;
+            pContext->SetSelection(ec, 1, &selection) | win::check();
+
             compositionBuffer.clear();
         }
     });

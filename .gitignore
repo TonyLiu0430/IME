@@ -35,6 +35,7 @@ vcpkg_installed/
 models/*
 hf_model_card/*
 python_probe/*
+benchmarks/*
 
 # release models
 # !models/model.gguf
