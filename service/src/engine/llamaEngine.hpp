@@ -1,9 +1,11 @@
 #pragma once
 
+#include <ggml-backend.h>
 #include <llama-cpp.h>
 #include <utf8/cpp20.h>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <filesystem>
@@ -33,14 +35,65 @@ class ModelManager {
         return project_root(loc) / "models" / "bopomofo-ime-llama-250m-Q4_K_M.gguf";
     }
 
+    static const char* device_type_name(enum ggml_backend_dev_type type) {
+        switch (type) {
+            case GGML_BACKEND_DEVICE_TYPE_CPU:
+                return "CPU";
+            case GGML_BACKEND_DEVICE_TYPE_GPU:
+                return "GPU";
+            case GGML_BACKEND_DEVICE_TYPE_IGPU:
+                return "IGPU";
+            case GGML_BACKEND_DEVICE_TYPE_ACCEL:
+                return "ACCEL";
+            case GGML_BACKEND_DEVICE_TYPE_META:
+                return "META";
+            default:
+                return "UNKNOWN";
+        }
+    }
+
+    static ggml_backend_dev_t find_igpu_device() {
+        const size_t count = ggml_backend_dev_count();
+        for (size_t i = 0; i < count; ++i) {
+            ggml_backend_dev_t device = ggml_backend_dev_get(i);
+            const auto type = ggml_backend_dev_type(device);
+            const char* name = ggml_backend_dev_name(device);
+            const char* description = ggml_backend_dev_description(device);
+            std::cerr << "[SRV] llama device[" << i << "] type=" << device_type_name(type)
+                      << " name=" << (name ? name : "<unknown>")
+                      << " desc=" << (description ? description : "<unknown>") << std::endl;
+
+            if (type == GGML_BACKEND_DEVICE_TYPE_IGPU) return device;
+        }
+        return nullptr;
+    }
+
     llama_model_ptr _model;
     const llama_vocab* _vocab;
 
     ModelManager() {
         llama_backend_init();
         auto path = resolve_model_path().string();
+        auto model_params = llama_model_default_params();
+        std::array<ggml_backend_dev_t, 2> offload_devices{};
+        ggml_backend_dev_t igpu = find_igpu_device();
+        const bool supports_gpu_offload = llama_supports_gpu_offload();
+        const bool use_igpu_offload = igpu && supports_gpu_offload;
+        if (use_igpu_offload) {
+            offload_devices[0] = igpu;
+            offload_devices[1] = nullptr;
+            model_params.devices = offload_devices.data();
+            model_params.n_gpu_layers = -1;
+            model_params.split_mode = LLAMA_SPLIT_MODE_NONE;
+            model_params.main_gpu = 0;
+        }
+
         std::cerr << "[SRV] loading model: " << path << std::endl;
-        _model.reset(llama_model_load_from_file(path.c_str(), llama_model_default_params()));
+        std::cerr << "[SRV] llama gpu_offload=" << (supports_gpu_offload ? "supported" : "unavailable")
+                  << " gpu_layers=" << model_params.n_gpu_layers << " main_gpu=" << model_params.main_gpu
+                  << std::endl;
+        std::cerr << "[SRV] llama igpu_offload=" << (use_igpu_offload ? "enabled" : "disabled") << std::endl;
+        _model.reset(llama_model_load_from_file(path.c_str(), model_params));
         if (!_model) throw std::runtime_error("Failed to load model: " + path);
         _vocab = llama_model_get_vocab(_model.get());
         std::cerr << "[SRV] model loaded" << std::endl;

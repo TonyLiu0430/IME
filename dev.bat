@@ -1,1 +1,2 @@
-python build_script.py
+@echo off
+python "%~dp0build_script.py"

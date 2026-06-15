@@ -52,6 +52,20 @@
       }
     },
     {
+      "name": "x64-release-llama-vulkan",
+      "displayName": "Windows x64  |  Release  |  llama Vulkan",
+      "inherits": "base",
+      "architecture": {
+        "value": "x64",
+        "strategy": "set"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreadedDLL",
+        "VCPKG_MANIFEST_FEATURES": "llama-vulkan"
+      }
+    },
+    {
       "name": "x64-relwithdebinfo",
       "displayName": "Windows x64  |  RelWithDebInfo",
       "inherits": "base",
@@ -89,6 +103,12 @@
       "name": "x64-release-build",
       "displayName": "建置  x64 Release",
       "configurePreset": "x64-release",
+      "configuration": "Release"
+    },
+    {
+      "name": "x64-release-llama-vulkan-build",
+      "displayName": "Build x64 Release llama Vulkan",
+      "configurePreset": "x64-release-llama-vulkan",
       "configuration": "Release"
     },
     {

@@ -6,5 +6,18 @@
     "reflectcpp",
     "utfcpp",
     "asio"
-  ]
+  ],
+  "features": {
+    "llama-vulkan": {
+      "description": "Build ggml/llama.cpp with Vulkan backend for GPU and iGPU offload.",
+      "dependencies": [
+        {
+          "name": "ggml",
+          "features": [
+            "vulkan"
+          ]
+        }
+      ]
+    }
+  }
 }
