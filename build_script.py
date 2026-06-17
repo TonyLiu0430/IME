@@ -18,6 +18,8 @@ for p in temp.glob("*.dll"):
         pass
 
 build_dir = root / "build" / configure_preset
+tsf_dir = build_dir / "tsf" / build_config
+tsf_dll = tsf_dir / "MyIME.dll"
 
 current = sorted(str(p.relative_to(root)).replace("\\", "/") for p in src.rglob("*") if p.is_file())
 
@@ -25,20 +27,24 @@ previous = manifest.read_text(encoding="utf-8").splitlines() if manifest.exists(
 if set(current) != set(previous) or not build_dir.is_dir():
     subprocess.run(["cmake", "--preset", configure_preset], cwd=root, check=True)
 
-dll = build_dir / "tsf" / build_config / "MyIME.dll"
-if dll.exists():
+if tsf_dll.exists():
     t = datetime.now().strftime("%Y%m%d_%H%M%S")
     bak = temp / f"MyIME_{t}.dll"
     i = 1
     while bak.exists():
         bak = temp / f"MyIME_{t}_{i}.dll"
         i += 1
-    dll.replace(bak)
+    print(f"Moving previous TSF DLL out of the build output: {tsf_dll} -> {bak}")
+    tsf_dll.replace(bak)
 
 subprocess.run(["cmake", "--build", "--preset", build_preset], cwd=root, check=True)
+if not tsf_dll.exists():
+    raise FileNotFoundError(f"Build finished but TSF DLL was not produced: {tsf_dll}")
+
 manifest.write_text("\n".join(current), encoding="utf-8")
 
 register = (root / "scripts" / "register.ps1").resolve()
+register_dll = tsf_dll.resolve()
 subprocess.run(
     [
         "powershell.exe",
@@ -48,7 +54,8 @@ subprocess.run(
         "-Command",
         (
             "$p=Start-Process -FilePath powershell.exe -Verb RunAs -Wait -PassThru "
-            f"-ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File','{register}'); "
+            f"-ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File','{register}',"
+            f"'-DllPath','{register_dll}'); "
             "exit $p.ExitCode"
         ),
     ],

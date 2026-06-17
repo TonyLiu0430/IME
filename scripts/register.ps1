@@ -3,10 +3,10 @@
 .SYNOPSIS
     Registers the TSF IME with the system (calls regsvr32).
 .PARAMETER DllPath
-    Full path to MyIME.dll. Defaults to ..\build\x64-release\tsf\Release\MyIME.dll.
+    Full path to MyIME.dll. Defaults to ..\build\x64-release-llama-vulkan\tsf\Release\MyIME.dll.
 #>
 param(
-    [string]$DllPath = (Join-Path $PSScriptRoot "..\build\x64-release\tsf\Release\MyIME.dll")
+    [string]$DllPath = (Join-Path $PSScriptRoot "..\build\x64-release-llama-vulkan\tsf\Release\MyIME.dll")
 )
 
 $resolved = (Resolve-Path $DllPath -ErrorAction SilentlyContinue).Path
