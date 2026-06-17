@@ -30,6 +30,14 @@ namespace imesvc {
 
 inline constexpr int kLlamaThreads = 8;
 inline constexpr auto kLlamaReadyIdleThreshold = std::chrono::milliseconds(500);
+inline constexpr long long kSlowDecodeLogThresholdUs = 50'000;
+
+struct LlamaOffloadDevice {
+    ggml_backend_dev_t device = nullptr;
+    enum ggml_backend_dev_type type = GGML_BACKEND_DEVICE_TYPE_CPU;
+    size_t memory_free = 0;
+    size_t memory_total = 0;
+};
 
 class ModelManager {
     static std::filesystem::path resolve_model_path(std::source_location loc = std::source_location::current()) {
@@ -53,20 +61,49 @@ class ModelManager {
         }
     }
 
-    static ggml_backend_dev_t find_igpu_device() {
+    static double mib(size_t bytes) {
+        return static_cast<double>(bytes) / 1024.0 / 1024.0;
+    }
+
+    static LlamaOffloadDevice select_gpu_device() {
         const size_t count = ggml_backend_dev_count();
+        std::vector<LlamaOffloadDevice> candidates;
         for (size_t i = 0; i < count; ++i) {
             ggml_backend_dev_t device = ggml_backend_dev_get(i);
-            const auto type = ggml_backend_dev_type(device);
-            const char* name = ggml_backend_dev_name(device);
-            const char* description = ggml_backend_dev_description(device);
+            ggml_backend_dev_props props{};
+            ggml_backend_dev_get_props(device, &props);
+            const auto type = props.type;
+            const char* name = props.name ? props.name : ggml_backend_dev_name(device);
+            const char* description = props.description ? props.description : ggml_backend_dev_description(device);
             std::cerr << "[SRV] llama device[" << i << "] type=" << device_type_name(type)
                       << " name=" << (name ? name : "<unknown>")
-                      << " desc=" << (description ? description : "<unknown>") << std::endl;
+                      << " desc=" << (description ? description : "<unknown>")
+                      << " free_mib=" << std::fixed << std::setprecision(1) << mib(props.memory_free)
+                      << " total_mib=" << mib(props.memory_total) << std::defaultfloat
+                      << " id=" << (props.device_id ? props.device_id : "<unknown>") << std::endl;
 
-            if (type == GGML_BACKEND_DEVICE_TYPE_IGPU) return device;
+            if (type == GGML_BACKEND_DEVICE_TYPE_GPU || type == GGML_BACKEND_DEVICE_TYPE_IGPU) {
+                candidates.push_back({device, type, props.memory_free, props.memory_total});
+            }
         }
-        return nullptr;
+
+        if (candidates.empty()) return {};
+
+        std::sort(candidates.begin(), candidates.end(), [](const LlamaOffloadDevice& a, const LlamaOffloadDevice& b) {
+            if (a.type != b.type) {
+                return a.type == GGML_BACKEND_DEVICE_TYPE_IGPU;
+            }
+            if (a.memory_total != b.memory_total) return a.memory_total > b.memory_total;
+            return a.memory_free > b.memory_free;
+        });
+
+        const auto selected = candidates.front();
+        std::cerr << "[SRV] llama selected offload device type=" << device_type_name(selected.type)
+                  << " name=" << (ggml_backend_dev_name(selected.device) ? ggml_backend_dev_name(selected.device)
+                                                                         : "<unknown>")
+                  << " total_mib=" << std::fixed << std::setprecision(1) << mib(selected.memory_total)
+                  << std::defaultfloat << std::endl;
+        return selected;
     }
 
     llama_model_ptr _model;
@@ -77,11 +114,11 @@ class ModelManager {
         auto path = resolve_model_path().string();
         auto model_params = llama_model_default_params();
         std::array<ggml_backend_dev_t, 2> offload_devices{};
-        ggml_backend_dev_t igpu = find_igpu_device();
+        LlamaOffloadDevice offload_device = select_gpu_device();
         const bool supports_gpu_offload = llama_supports_gpu_offload();
-        const bool use_igpu_offload = igpu && supports_gpu_offload;
-        if (use_igpu_offload) {
-            offload_devices[0] = igpu;
+        const bool use_gpu_offload = offload_device.device && supports_gpu_offload;
+        if (use_gpu_offload) {
+            offload_devices[0] = offload_device.device;
             offload_devices[1] = nullptr;
             model_params.devices = offload_devices.data();
             model_params.n_gpu_layers = -1;
@@ -93,7 +130,7 @@ class ModelManager {
         std::cerr << "[SRV] llama gpu_offload=" << (supports_gpu_offload ? "supported" : "unavailable")
                   << " gpu_layers=" << model_params.n_gpu_layers << " main_gpu=" << model_params.main_gpu
                   << std::endl;
-        std::cerr << "[SRV] llama igpu_offload=" << (use_igpu_offload ? "enabled" : "disabled") << std::endl;
+        std::cerr << "[SRV] llama offload=" << (use_gpu_offload ? "enabled" : "disabled") << std::endl;
         _model.reset(llama_model_load_from_file(path.c_str(), model_params));
         if (!_model) throw std::runtime_error("Failed to load model: " + path);
         _vocab = llama_model_get_vocab(_model.get());
@@ -144,10 +181,12 @@ class LlamaEngine : public IEngine {
         long long cache_us = 0;
         long long cache_batch_us = 0;
         long long cache_decode_us = 0;
+        long long cache_sync_us = 0;
         long long candidate_us = 0;
         long long mask_us = 0;
         long long step_batch_us = 0;
         long long step_decode_us = 0;
+        long long step_sync_us = 0;
         long long log_us = 0;
         size_t cache_tokens = 0;
         size_t candidate_tokens = 0;
@@ -318,11 +357,24 @@ private:
         std::cout << std::fixed << std::setprecision(3) << "[TIME] detail_ms"
                   << " tokenize=" << ms(timing.tokenize_us) << " cache_total=" << ms(timing.cache_us)
                   << " cache_batch=" << ms(timing.cache_batch_us) << " cache_decode=" << ms(timing.cache_decode_us)
+                  << " cache_sync=" << ms(timing.cache_sync_us)
                   << " candidate=" << ms(timing.candidate_us) << " mask=" << ms(timing.mask_us)
                   << " step_batch=" << ms(timing.step_batch_us) << " step_decode=" << ms(timing.step_decode_us)
+                  << " step_sync=" << ms(timing.step_sync_us)
                   << " log=" << ms(timing.log_us) << " cache_tokens=" << timing.cache_tokens
                   << " candidate_tokens=" << timing.candidate_tokens << " mask_calls=" << timing.mask_calls
                   << " decode_calls=" << timing.decode_calls << std::defaultfloat << std::endl;
+    }
+
+    static void log_slow_decode(const char* stage, llama_pos pos, size_t token_count, llama_token last_token,
+                                long long decode_us, long long sync_us) {
+        const long long total_us = decode_us + sync_us;
+        if (total_us < kSlowDecodeLogThresholdUs) return;
+
+        std::cerr << std::fixed << std::setprecision(3) << "[TIME] slow_decode stage=" << stage
+                  << " pos=" << pos << " tokens=" << token_count << " last_token=" << last_token
+                  << " decode_ms=" << ms(decode_us) << " sync_ms=" << ms(sync_us)
+                  << " total_ms=" << ms(total_us) << std::defaultfloat << std::endl;
     }
 
 #if IMESVC_TRACE_PREDICT
@@ -419,8 +471,15 @@ private:
 
         const auto decode_start = std::chrono::steady_clock::now();
         int rc = llama_decode(llama_ctx.get(), batch);
+        const long long decode_us = elapsed_us(decode_start);
         if (rc == 0) mark_backend_touch();
-        timing.step_decode_us += elapsed_us(decode_start);
+        timing.step_decode_us += decode_us;
+
+        const auto sync_start = std::chrono::steady_clock::now();
+        llama_synchronize(llama_ctx.get());
+        const long long sync_us = elapsed_us(sync_start);
+        timing.step_sync_us += sync_us;
+        log_slow_decode("step", next_pos, 1, token, decode_us, sync_us);
 
         const auto free_start = std::chrono::steady_clock::now();
         llama_batch_free(batch);
@@ -468,8 +527,15 @@ private:
 
             const auto decode_start = std::chrono::steady_clock::now();
             int rc = llama_decode(llama_ctx.get(), batch);
+            const long long decode_us = elapsed_us(decode_start);
             if (rc == 0) mark_backend_touch();
-            timing.cache_decode_us += elapsed_us(decode_start);
+            timing.cache_decode_us += decode_us;
+
+            const auto sync_start = std::chrono::steady_clock::now();
+            llama_synchronize(llama_ctx.get());
+            const long long sync_us = elapsed_us(sync_start);
+            timing.cache_sync_us += sync_us;
+            log_slow_decode("cache", next_pos, prompt_tokens.size(), prompt_tokens.back(), decode_us, sync_us);
 
             const auto free_start = std::chrono::steady_clock::now();
             llama_batch_free(batch);
