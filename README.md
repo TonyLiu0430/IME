@@ -1,3 +1,12 @@
+# 模型
+https://drive.google.com/file/d/1cPvtxCcCNy56cQazP052YQz9QzjeLrWS/view?usp=sharing
+
+臨時連結，模型 under CC-BY-NC-4.0 授權，請依此授權下使用
+
+# clone repo
+```bash
+git clone --recurse-submodules <repo url>
+```
 # 設定
 cmake --preset x64-release
 
